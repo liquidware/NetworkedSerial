@@ -45,10 +45,10 @@ import com.liquidware.networkedserial.app.R;
 
 public class NetworkedSerialActivity extends SerialPortActivity {
 	private static final String TAG = "NetworkedSerialActivity";
-	
+
 	private static final int CMD_SUCCESS  = -1;
 	private static final int CMD_TIMEOUT  = -2;
-	
+
 	SendingThread mSendingThread;
 	volatile byte[] mBuffer;
 	static TextView mReception;
@@ -59,67 +59,69 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	public static Button mButtonIP;
 	public static Button mButtonPing;
 	volatile String mReceptionBuffer;
+	volatile StringBuffer mStringBuffer;
 	volatile String mExpectedResult;
 	volatile boolean mIsExpectedResult;
 	volatile int mTimeout;
-	
-	public void setDisabled() {
-		 mButtonInit.setEnabled(false);
-		 //mProgressBar.setVisibility(ProgressBar.VISIBLE);
-		 mProgressBar.setProgress(0);
-		 mReception.setText("");
+
+	public void setUIDisabled() {
+		mButtonInit.setEnabled(false);
+		mButtonPing.setEnabled(false);
+		mButtonIP.setEnabled(false);
+		mProgressBar.setVisibility(ProgressBar.VISIBLE);
+		mProgressBar.setProgress(0);
 	}
-	
-	public void setEnabled() {
-		
+
+	public void setUIEnabled() {
+		mButtonInit.setEnabled(true);
+		mButtonPing.setEnabled(true);
+		mButtonIP.setEnabled(true);
+		mProgressBar.setVisibility(ProgressBar.INVISIBLE);
+		mProgressBar.setProgress(0);
 	}
-	
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.networkedserial);
 		mBuffer = new byte[1024];
-		
-		
+		mStringBuffer = new StringBuffer(500000);
 		mReception = (TextView) findViewById(R.id.TextViewReception);
 		mScroller = (ScrollView) findViewById(R.id.scroller);
 		mProgressBar = (ProgressBar) findViewById(R.id.ProgressBar1);
 		mPingIP = (EditText) findViewById(R.id.EditTextPingIP);
-		
+
 		mButtonInit = (Button)findViewById(R.id.ButtonInit);
 		mButtonInit.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
 				Toast.makeText(getApplicationContext(), "Performing Send!", 1).show();
-				
+
 				if (mSerialPort != null) {
 					new ExecuteCommandTask().execute("init");
-					
 				} else {
-					Toast.makeText(getApplicationContext(), "Error: Serial is null", 1).show();
+					Toast.makeText(getApplicationContext(), "Error: Serial not ready", 1).show();
 				}
 			}
 		});
-		
-		
-	
+
 		mButtonIP = (Button)findViewById(R.id.button1);
 		mButtonIP.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
 				Toast.makeText(getApplicationContext(), "Performing IP", 1).show();
-				
+
 				mReception.append("Getting local IP address...\n");
 				displayLocalIpAddress();
 				mReception.append("Done.\n");
 			}
 		});
-			
+
 		mButtonPing = (Button)findViewById(R.id.button2); 
 		mButtonPing.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
 				Toast.makeText(getApplicationContext(), "Performing Ping", 1).show();
-				 
+
 				mReception.append("Pinging server...\n");
-				String url = mPingIP.getText().toString(); //"192.168.1.118";
+				String url = mPingIP.getText().toString();
 				pingUrl(url);
 				pingUrl(url);
 				pingUrl(url); 
@@ -128,7 +130,7 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			}
 		});
 	}
-	
+
 	public void displayLocalIpAddress() {
 		try {
 			Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); 
@@ -146,7 +148,7 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 								inetAddress.getHostAddress().toString() + "\n");
 					}
 				}
-				
+
 			}
 		} catch (SocketException ex) {
 			Log.e(TAG, ex.toString());
@@ -178,51 +180,50 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	}
 
 	private class ExecuteCommandTask extends AsyncTask<String, Integer, Boolean> {
-		 protected void onPreExecute() {
-			 
-			 mButtonInit.setEnabled(false);
-			 //mProgressBar.setVisibility(ProgressBar.VISIBLE);
-			 mProgressBar.setProgress(0);
-			 mReception.setText("");
-		 }
-		 
-		 protected void send(String cmd) {
-				/* Prepare the command */		
-				mReceptionBuffer = "";
-				mIsExpectedResult = false;
-				mBuffer = cmd.getBytes();
-				
-				Log.d(TAG, "Sending '" + cmd + "'");
-				mSendingThread = new SendingThread();
-				mSendingThread.start();
-		 }
-		 
-		 protected void setTimeout(int ms) {
-			 mTimeout = ms;
-		 }
-		 
-		 protected int getTimeout() {
-			 return mTimeout;
-		 }
-		 
-		 protected boolean expect(String expected) {
-			 int ms_count = 0;
-			 mExpectedResult = expected;
-			 
+
+		protected void onPreExecute() {
+			setUIDisabled();
+		}
+
+		protected void send(String cmd) {
+			/* Prepare the command */	
+			mReceptionBuffer = "";
+			mStringBuffer.delete(0, mStringBuffer.length());
+			mIsExpectedResult = false;
+			mBuffer = cmd.getBytes();
+
+			Log.d(TAG, "Sending '" + cmd + "'");
+			mSendingThread = new SendingThread();
+			mSendingThread.start();
+		}
+
+		protected void setTimeout(int ms) {
+			mTimeout = ms;
+		}
+
+		protected int getTimeout() {
+			return mTimeout;
+		}
+
+		protected boolean expect(String expected) {
+			int ms_count = 0;
+			mExpectedResult = expected;
+
 			setTimeout(240000);
-			 
+
 			/* Wait for the response */
 			while (!mIsExpectedResult) {
 
 				Log.d(TAG, "Scaning '" + mExpectedResult + "' " + ms_count);
 				publishProgress(ms_count);
-				
+
+				mReceptionBuffer = mStringBuffer.toString();
 				if (mReceptionBuffer.indexOf(mExpectedResult) > 0) {
 					mIsExpectedResult = true;
 					Log.d(TAG, "Expect found!");
 					publishProgress(CMD_SUCCESS);
 				}
-				
+
 				SystemClock.sleep(100);
 				ms_count = ms_count + 100;
 				if (ms_count > getTimeout()) {
@@ -231,89 +232,73 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 					break;
 				}
 			}
-			
+
 			return mIsExpectedResult;
-		 }
-		 
-		 protected boolean send_cmd(String cmd, String expect) {
-			 boolean r;
-			 
-			 send(cmd);
-			 r = expect(expect);
-			 return r;
-		 }
-		 
-	     protected Boolean doInBackground(String... cmd) {
-	    	
-	    	boolean r;
-	    	
+		}
+
+		protected boolean send_cmd(String cmd, String expect) {
+			boolean r;
+
+			send(cmd);
+			r = expect(expect);
+			return r;
+		}
+
+		protected Boolean doInBackground(String... cmd) {
+
+			boolean r;
+
 			r = (send_cmd("cd /home; sleep 3\n", "root@beagleboard") &&
-				 send_cmd("ls -l; sleep 3\n", "root@beagleboard") &&
-				 send_cmd("cd /home/root; sleep 3\n", "root@beagleboard") &&
-				 send_cmd("ls -l;\n", "root@beagleboard"));
-               
-                // ##### Write a file to the disk #####
-                /* We have to use the openFileOutput()-method
-                 * the ActivityContext provides, to
-                 * protect your file from others and
-                 * This is done for security-reasons.
-                 * We chose MODE_WORLD_READABLE, because
-                 *  we have nothing to hide in our file */             
-                
-               
-                // Write the string to the file
-			
-                try {
-                	File f = new File(Environment.getExternalStorageDirectory(), "flower.jpg.b64");
-                	FileWriter w = new FileWriter(f);
+					send_cmd("ls -l; sleep 3\n", "root@beagleboard") &&
+					send_cmd("cd /home/root; sleep 3\n", "root@beagleboard") &&
+					send_cmd("ls -l; sleep 3\n", "root@beagleboard"));
 
-                	Log.d(TAG, Environment.getExternalStorageState());
-                	
-					//w.write(mReceptionBuffer.replaceAll("\\n", "").replaceAll("\\r", ""));
-	                /* ensure that everything is
-	                 * really written out and close */
-	                w.flush();
-	                w.close();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
+			try {
+				File f = new File(Environment.getExternalStorageDirectory(), "output.txt");
+				FileWriter w = new FileWriter(f);
+
+				Log.d(TAG, Environment.getExternalStorageState());
+				//Write Disabled for now
+				//w.write(mReceptionBuffer.replaceAll("\\n", "").replaceAll("\\r", ""));
+				/* ensure that everything is
+				 * really written out and close */
+				w.flush();
+				w.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			return r;
+		}
+
+		protected void onProgressUpdate(Integer... progress) {
+			mProgressBar.setMax(getTimeout());
+			mProgressBar.setProgress(progress[0]);
+
+			mReception.setText(mReceptionBuffer);
+			mScroller.smoothScrollTo(0, mReception.getBottom());
+			if (progress[0] == CMD_SUCCESS) {
+				Toast.makeText(getApplicationContext(), "Success!", 1).show();
+			} else if (progress[0] == CMD_TIMEOUT){
+				Toast.makeText(getApplicationContext(), "Error: timeout running command.", 1).show();
+			} else {
+				//just update the UI with some progress.
+			}
+		}
+
+		protected void onPostExecute(Boolean result) {
+			setUIEnabled();
+		}
+	}
 
 
- 
-	        return r;
-	     }
-	     
-	     protected void onProgressUpdate(Integer... progress) {
-	    	 mProgressBar.setMax(getTimeout());
-	         mProgressBar.setProgress(progress[0]);
-	         
-	    	 mReception.setText(mReceptionBuffer);
-	    	 mScroller.smoothScrollTo(0, mReception.getBottom());
-	    	 if (progress[0] == CMD_SUCCESS) {
-	    		 Toast.makeText(getApplicationContext(), "Success!", 1).show();
-	    	 } else if (progress[0] == CMD_TIMEOUT){
-	    		 Toast.makeText(getApplicationContext(), "Error: timeout running command.", 1).show();
-	    	 } else {
-	    		 //just update the UI with some progress.
-	    	 }
-	     }
 
-	     protected void onPostExecute(Boolean result) {
-			 mButtonInit.setEnabled(true);
-			 //mProgressBar.setVisibility(ProgressBar.GONE);
-	     }
-	 }
-
-	
-	
 	private class SendingThread extends Thread {
 		@Override
 		public void run() {
-			//while (!isInterrupted()) {
 			if (mOutputStream == null)
 				return;
-			
+
 			try {
 				mOutputStream.write(mBuffer);
 			} catch (IOException e) {
@@ -322,19 +307,14 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			}
 		}
 	}
-	
-	
+
+
+
 	protected void onDataReceived(final byte[] buffer, final int size) {
 		runOnUiThread(new Runnable() {
 			public void run() {
 				if (mReception != null) {
-					String response; 
-					StringBuilder builder;
-					
-					builder = new StringBuilder(mReceptionBuffer);
-					response = new String(buffer, 0, size);
-					builder.append(response);
-					mReceptionBuffer = builder.toString();
+					mStringBuffer.append(new String(buffer, 0, size));
 				}
 			}
 		});
