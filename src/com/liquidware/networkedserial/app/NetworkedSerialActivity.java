@@ -251,6 +251,7 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			r = (send_cmd("cd /home; sleep 3\n", "root@beagleboard") &&
 					send_cmd("ls -l; sleep 3\n", "root@beagleboard") &&
 					send_cmd("cd /home/root; sleep 3\n", "root@beagleboard") &&
+					send_cmd("cat flower.jpg.b64\n", "root@beagleboard") &&
 					send_cmd("ls -l; sleep 3\n", "root@beagleboard"));
 
 			try {
@@ -291,8 +292,6 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 		}
 	}
 
-
-
 	private class SendingThread extends Thread {
 		@Override
 		public void run() {
@@ -308,14 +307,12 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 		}
 	}
 
-
-
 	protected void onDataReceived(final byte[] buffer, final int size) {
 		runOnUiThread(new Runnable() {
 			public void run() {
-				if (mReception != null) {
-					mStringBuffer.append(new String(buffer, 0, size));
-				}
+				if (mStringBuffer == null)
+					return;
+				mStringBuffer.append(new String(buffer, 0, size));
 			}
 		});
 	}
