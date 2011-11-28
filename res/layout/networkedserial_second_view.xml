@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical" >
+
+    <LinearLayout
+        android:id="@+id/linearLayout1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" >
+        
+        <Button
+            android:id="@+id/ButtonBack"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Back" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/linearLayout3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center" >
+
+        <ImageButton
+            android:id="@+id/imageButton1"
+            android:layout_width="320px"
+            android:layout_height="240px"
+            android:src="@android:drawable/sym_def_app_icon" />
+
+        <ImageButton
+            android:id="@+id/imageButton2"
+            android:layout_width="320px"
+            android:layout_height="240px"
+            android:src="@android:drawable/sym_def_app_icon" />
+
+    </LinearLayout>
+
+</LinearLayout>

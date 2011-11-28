@@ -35,7 +35,7 @@ public class Application extends android.app.Application {
 		if (mSerialPort == null) {
 			/* Read serial port parameters */
 			SharedPreferences sp = getSharedPreferences("android_serialport_api.sample_preferences", MODE_PRIVATE);
-			String path = "/dev/ttyUSB0"; //sp.getString("DEVICE", "");
+			String path = "/dev/ttyACM0"; //sp.getString("DEVICE", "");
 			int baudrate = 115200; //Integer.decode(sp.getString("BAUDRATE", "-1"));
 
 			/* Check parameters */
