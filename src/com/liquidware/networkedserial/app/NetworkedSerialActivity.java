@@ -35,17 +35,25 @@ import java.util.Enumeration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import android.app.Activity;
+import android.app.KeyguardManager;
+import android.app.KeyguardManager.KeyguardLock;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.Animation;
@@ -78,11 +86,13 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	ProgressBar mProgressBar;
 	ImageButton mImage1;
 	ImageButton mImage2;
-	public static Button mButtonInit;
-	public static Button mButtonIP;
+	Button mButtonSerial;
+	Button mButtonBeep;
+	TextView mTextViewIP;
+	String mPingUrl;
+	String mPingResponse;
+	String mActiveCmd;
 	public static Button mButtonPing;
-	public static Button mButtonBack;
-	public static ViewFlipper mFlipper;
 	volatile String mReceptionBuffer;
 	volatile StringBuffer mStringBuffer;
 	volatile String mExpectedResult;
@@ -91,97 +101,138 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	volatile int mTimeout;
 
 	public void setUIDisabled() {
-		mButtonInit.setEnabled(false);
+		mButtonSerial.setEnabled(false);
 		mButtonPing.setEnabled(false);
-		mButtonIP.setEnabled(false);
+		mButtonBeep.setEnabled(false);
 		mProgressBar.setVisibility(ProgressBar.VISIBLE);
 		mProgressBar.setProgress(0);
 	}
 
 	public void setUIEnabled() {
-		mButtonInit.setEnabled(true);
+		mButtonSerial.setEnabled(true);
 		mButtonPing.setEnabled(true);
-		mButtonIP.setEnabled(true);
+		mButtonBeep.setEnabled(true);
 		mProgressBar.setVisibility(ProgressBar.INVISIBLE);
-		mProgressBar.setProgress(0);
-		try {
-			Bitmap bitmap1 = BitmapFactory.decodeFile(mLocalDir + "/image1.jpg");
-			Bitmap bitmap2 = BitmapFactory.decodeFile(mLocalDir + "/image2.jpg");
-			if (bitmap1 != null)
-				mImage1.setImageBitmap(bitmap1);
-			if (bitmap2 != null)
-				mImage2.setImageBitmap(bitmap2);
-		} catch (Exception ex) {
-			ex.printStackTrace();
-		}
-
-        mFlipper.setInAnimation(Util.inFromRightAnimation());
-        mFlipper.setOutAnimation(Util.outToLeftAnimation());
-        mFlipper.showNext();  
+		mProgressBar.setProgress(0);  
+	}
+	
+	private void setupKeyGuardPower() {
+	    PowerManager.WakeLock wl;
+	    
+        try {
+            Log.w(TAG, "Disabling keyguard");
+            KeyguardManager keyguardManager = (KeyguardManager)getSystemService(Activity.KEYGUARD_SERVICE);
+            KeyguardLock lock = keyguardManager.newKeyguardLock(KEYGUARD_SERVICE);
+            lock.disableKeyguard();
+        } catch (Exception ex) {
+            Log.e(TAG, ex.getStackTrace().toString());
+            ex.printStackTrace();
+        }
+        
+        try {
+            Log.w(TAG, "Acquiring wake lock");
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            wl = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "My Tag");
+        } catch (Exception ex) {
+            Log.e(TAG, ex.getStackTrace().toString());
+            ex.printStackTrace();
+        }
 	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.networkedserial);
+		
+		requestWindowFeature(Window.FEATURE_NO_TITLE);
+        //getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+        //WindowManager.LayoutParams.FLAG_FULLSCREEN);
+ 
+		setContentView(R.layout.networked_serial_activity);
 		mBuffer = new byte[1024];
 		mStringBuffer = new StringBuffer(500000);
 		mShowSerialInput = true;
+		
+		setupKeyGuardPower();
+		
 		mReception = (TextView) findViewById(R.id.TextViewReception);
 		mScroller = (ScrollView) findViewById(R.id.scroller);
 		mProgressBar = (ProgressBar) findViewById(R.id.ProgressBar1);
 		mPingIP = (EditText) findViewById(R.id.EditTextPingIP);
-		mImage1 = (ImageButton) findViewById(R.id.imageButton1);
-		mImage2 = (ImageButton) findViewById(R.id.imageButton2);
-		mFlipper = (ViewFlipper) findViewById(R.id.flipper);
 		
-		mButtonInit = (Button)findViewById(R.id.ButtonInit);
-		mButtonInit.setOnClickListener(new View.OnClickListener() {
+		mButtonSerial = (Button)findViewById(R.id.ButtonSerial);
+		mButtonSerial.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
-				Toast.makeText(getApplicationContext(), "Performing Send!", 1).show();
+				Toast.makeText(getApplicationContext(), "Performing serial send!", 1).show();
 
 				if (mSerialPort != null) {
-					new ExecuteCommandTask().execute("init");
+					new ExecuteCommandTask().execute("hello");
 				} else {
-					Toast.makeText(getApplicationContext(), "Error: Serial not ready", 1).show();
+					Toast.makeText(getApplicationContext(), "Error: serial not ready", 1).show();
 				}
 			}
-		});
-
-		mButtonIP = (Button)findViewById(R.id.button1);
-		mButtonIP.setOnClickListener(new View.OnClickListener() {
-			public void onClick(View v) {
-				Toast.makeText(getApplicationContext(), "Performing IP", 1).show();
-
-				mReception.append("Getting local IP address...\n");
-				mReception.append(Util.getLocalIpAddress());
-				mReception.append("Done.\n");
-			}
-		});
-
-		mButtonPing = (Button)findViewById(R.id.button2); 
+		});  
+		  
+        mButtonBeep = (Button)findViewById(R.id.ButtonSound);
+        mButtonBeep.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                Toast.makeText(getApplicationContext(), "Beep!", 1).show();
+                
+                AudioManager amanager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                int maxVolume = amanager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                amanager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0);
+                
+                MediaPlayer mp = new MediaPlayer();
+                
+                mp.setAudioStreamType(AudioManager.STREAM_ALARM); // this is important.
+                
+                try {
+                    mp.setDataSource("/sdcard/Music/BeepStereo.wav");
+                } catch (IllegalArgumentException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (SecurityException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (IllegalStateException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                try {
+                    mp.prepare();
+                } catch (IllegalStateException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                mp.start();
+            }
+        });  
+		
+		mButtonPing = (Button)findViewById(R.id.buttonPing); 
 		mButtonPing.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
-				Toast.makeText(getApplicationContext(), "Performing Ping", 1).show();
-
-				mReception.append("Pinging server...\n");
-				String url = mPingIP.getText().toString();
-				mReception.append(Util.pingUrl(url));
-				mReception.append(Util.pingUrl(url));
-				mReception.append(Util.pingUrl(url));
-				mReception.append(Util.pingUrl(url));
-				mReception.append("Done.\n");
+				Toast.makeText(getApplicationContext(), "Performing ping", 1).show();
+				
+				mPingUrl = "http://" + mPingIP.getText().toString();
+				mReception.append("Pinging server '" + mPingUrl + "'\n");
+				
+                if (mSerialPort != null) {
+                    new ExecuteCommandTask().execute("ping");
+                } else {
+                    Toast.makeText(getApplicationContext(), "Error: serial not ready", 1).show();
+                }
 			}
 		});
-		mButtonBack = (Button)findViewById(R.id.ButtonBack);
-		mButtonBack.setOnClickListener(new View.OnClickListener() {
-			public void onClick(View v) {
-		         mFlipper.setInAnimation(Util.inFromLeftAnimation());
-		         mFlipper.setOutAnimation(Util.outToRightAnimation());
-		         mFlipper.showPrevious();     
-			}
-		});
-
+		
+		mTextViewIP = (TextView)findViewById(R.id.TextViewNetworkIP);
+		mTextViewIP.setText(Util.getLocalIpAddress());
+		
 		this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN); 
 	}
 
@@ -215,19 +266,19 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			int ms_count = 0;
 			mExpectedResult = expected;
 
-			setTimeout(3000);
-
 			/* Wait for the response */
 			while (!mIsExpectedResult) {
 
-				Log.d(TAG, "Scaning '" + mExpectedResult + "' " + ms_count);
+				Log.d(TAG, "Scanning for '" + mExpectedResult + "' " + ms_count);
 				publishProgress(ms_count);
 
 				mReceptionBuffer = mStringBuffer.toString();
-				if (mReceptionBuffer.indexOf(mExpectedResult) > 0) {
+				Log.d(TAG, "Response '" + mReceptionBuffer + "'");
+				if (mReceptionBuffer.contains(mExpectedResult)) {
 					mIsExpectedResult = true;
 					Log.d(TAG, "Expect found!");
 					publishProgress(CMD_SUCCESS);
+					break;
 				}
 
 				SystemClock.sleep(100);
@@ -250,72 +301,6 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			return r;
 		}
 		
-		protected Boolean get_remote_file(String remoteFile, String localFile) {
-			boolean storeTempFile = false;
-			File tf = null;
-			FileWriter w = null;
-			StringBuffer buff = new StringBuffer();
-			boolean keepWriting = true;
-			int count = 0;
-			
-			/* Disable input visuals during file transfer */
-			mShowSerialInput = false;
-			
-			/* Send the command to transfer the file */
-			send_cmd("./b64-armv7 -e " + remoteFile + ";\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n", "root@beagleboard");
-			
-			/* Count input lines */
-			int lines = Util.getLineCount(mReceptionBuffer);
-			
-			try {
-				BufferedReader br = new BufferedReader(new StringReader(mReceptionBuffer));//.replaceAll("\\r\\z", "")));
-				while (keepWriting) {
-					String t = br.readLine();
-					if ( (t == null) || t.contains("root@beagleboard"))
-						break;
-					if ((count > 0) && (count < (lines))) {
-						buff.append(t);
-					}
-					count++;
-				}
-				
-				if (storeTempFile) {
-					tf = new File(localFile + ".tmp");
-					w = new FileWriter(tf);
-					
-					w.write(buff.toString());
-					w.flush();
-					w.close();
-				}
-				
-				
-				/* Read the file, decode, and finally store */
-				byte[] b64_bytes = buff.toString().getBytes(); //getBytesFromFile(tf);
-				
-				try {
-					byte[] b_dec = Base64.decode(b64_bytes,Base64.DEFAULT);
-					File f = new File(localFile);
-					FileOutputStream os = new FileOutputStream(f);
-					os.write(b_dec);
-					os.flush();
-					os.close();
-				} catch (Exception ex) {
-					ex.printStackTrace();
-				}
-
-				/* Delete the temp file */
-				//tf.delete();
-				
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			
-			mShowSerialInput = true;
-			
-			return true;
-		}
-		
 		public boolean prepareLocalDirectory(String path) {
 			File dir = new File(path);
 			Util.deleteEntireDirectory(dir);
@@ -325,27 +310,65 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 		}
 
 		protected Boolean doInBackground(String... cmd) {
-			boolean r;
-
-			r = (prepareLocalDirectory(mLocalDir) &&
-					send_cmd("root", "root@beagleboard") &&
-					get_remote_file("/home/root/chris.jpg", mLocalDir + "/image1.jpg") &&
-					get_remote_file("/home/root/chris.jpg", mLocalDir + "/image2.jpg"));
+			boolean r = true;
+			
+			mActiveCmd = cmd[0];
+            
+			prepareLocalDirectory(mLocalDir);
+            
+            if (mActiveCmd.equals("hello")) {
+                int count = 10;
+                setTimeout(5000);
+                
+                //Say hello to any serial terminals
+                while (count-- > 0) {
+                    if (send_cmd("[" + count + "]" + 
+                            "Hello there, you serial device\r", "hi")) {
+                        //Response found, talk to me.
+                        setTimeout(20000);
+                        if (send_cmd("Talk to me, you have 30 seconds.\r\nType exit to quit.\r","exit")) {
+                            send("Goodbye.\r");
+                            count = 0;
+                            break;
+                        }
+                        send("Session timeout, goodbye.\r");
+                        count = 0;
+                        break;
+                    }
+                }
+                
+            } else if (mActiveCmd.equals("ping")) {
+                mPingResponse = "";
+                setTimeout(3000);
+                
+                mPingResponse = Util.pingHttpUrl(mPingUrl);
+                publishProgress(1000);
+                mPingResponse = Util.pingHttpUrl(mPingUrl);
+                publishProgress(2000);
+                mPingResponse = Util.pingHttpUrl(mPingUrl);
+                publishProgress(3000);
+            }
 			return r;
 		}
 
 		protected void onProgressUpdate(Integer... progress) {
 			mProgressBar.setMax(getTimeout());
 			mProgressBar.setProgress(progress[0]);
-			if (mShowSerialInput)
+			if (mShowSerialInput && mActiveCmd.equals("hello"))
 				mReception.setText(mReceptionBuffer);
 			mScroller.smoothScrollTo(0, mReception.getBottom());
+			
+			//Handle the UI progress
 			if (progress[0] == CMD_SUCCESS) {
 				Toast.makeText(getApplicationContext(), "Success!", 1).show();
 			} else if (progress[0] == CMD_TIMEOUT){
-				Toast.makeText(getApplicationContext(), "Error: timeout running command.", 1).show();
+			    //do nothing
+				//Toast.makeText(getApplicationContext(), "Error: timeout running command.", 1).show();
 			} else {
 				//just update the UI with some progress.
+			    if (mActiveCmd.equals("ping")) {
+			        mReception.append(mPingResponse);
+			    }
 			}
 		}
 
