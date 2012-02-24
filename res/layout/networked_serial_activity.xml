@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical" 
+    android:background="@drawable/semi_black">
+
+    <LinearLayout
+        android:id="@+id/linearLayout1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/semi_black" >
+
+        <LinearLayout
+            android:id="@+id/linearLayout2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/semi_black" >
+
+            <Button
+                android:id="@+id/ButtonSerial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Send Serial"
+                style="@style/ActionButton" />
+            
+            <Button
+                android:id="@+id/ButtonSound"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Beep"
+                style="@style/ActionButton" />
+
+            <Button
+                android:id="@+id/buttonPing"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ping Server"
+                style="@style/ActionButton" />
+            
+            <EditText
+                android:id="@+id/EditTextPingIP"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="liquidware.com" >
+
+                <requestFocus />
+            </EditText>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/TextViewNetworkIP"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Network IP: " android:lines="3"/>
+
+    <ProgressBar
+        android:id="@+id/ProgressBar1" 
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="6000"
+        android:visibility="invisible" />
+
+    <ScrollView
+        android:id="@+id/scroller"
+        android:layout_width="fill_parent"
+        android:layout_height="400px"
+        android:layout_weight="0.50" >
+
+        <TextView
+            android:id="@+id/TextViewReception"
+            android:layout_width="fill_parent"
+            android:layout_height="match_parent"
+            android:paddingBottom="8dip" />
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/linearLayout3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center" >
+
+    </LinearLayout>
+
+</LinearLayout>
