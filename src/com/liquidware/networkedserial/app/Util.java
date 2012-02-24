@@ -98,26 +98,31 @@ public class Util {
 	 * @param address The address to perform the ping
 	 * @return The response from the server. Contains 'Error' on fail.
 	 */
-	public static String pingUrl(String address) {
+	public static String pingHttpUrl(String address) {
 		String response = "";
 		
 		try {
-			final URL url = new URL("http://" + address);
-			final HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
+			URL url = new URL(address);
+			Log.d(TAG, "Pinging host '" + url.getHost() + "'");
+			
+			HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
+			
 			urlConn.setConnectTimeout(1000 * 10); // mTimeout is in seconds
-			final long startTime = System.currentTimeMillis();
+			long startTime = System.currentTimeMillis();
 			urlConn.connect();
-			final long endTime = System.currentTimeMillis();
+			long endTime = System.currentTimeMillis();
 			if (urlConn.getResponseCode() == HttpURLConnection.HTTP_OK) {
 				response = "Reply from " + url + ": Time=" + (endTime - startTime) + " ms\n";
 			} else {
 				response = "No response from server\n";
 			}
 		} catch (final MalformedURLException e1) {
-			Log.d(TAG, e1.getStackTrace().toString());
+		    e1.printStackTrace();
+			Log.d(TAG, "MalformedURLException " + e1.getStackTrace().toString());
 			response = "Error\n";
-		} catch (final IOException e) {
-			Log.d(TAG, e.getStackTrace().toString());
+		} catch (final Exception e) {
+		    e.printStackTrace();
+			Log.d(TAG, "Exception " + e.getStackTrace().toString());
 			response = "Error\n";
 		}
 		return response;
@@ -129,21 +134,27 @@ public class Util {
 	 */
 	public static String getLocalIpAddress() {
 		String response = "";
+		Log.d(TAG, "getLocalIpAddress"); 
+		
 		try {
-			Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); 
+			Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); 	
+			
 			while(en.hasMoreElements()) {
+			    Log.d(TAG, "Next network interface");
 				NetworkInterface intf = en.nextElement();
+				Log.d(TAG, "Name=" + intf.getDisplayName());
 				Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses();
 				while(enumIpAddr.hasMoreElements()) {
 					InetAddress inetAddress = enumIpAddr.nextElement();
 					if (!inetAddress.isLoopbackAddress()) {
 						response += (intf.getName() + ":" + 
-								    inetAddress.getHostAddress().toString() + "\n");
+								    inetAddress.getHostAddress().toString());
 					}
 				}
 			}
 		} catch (SocketException ex) {
-			Log.e(TAG, ex.toString());
+		    ex.printStackTrace();
+			//Log.e(TAG, ex.getMessage().toString());
 			response = "Error\n";
 		}
 		return response;
