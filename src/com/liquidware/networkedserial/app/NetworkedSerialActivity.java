@@ -1,80 +1,53 @@
 /*
  * Copyright 2011 Chris Ladden chris.ladden@liquidware.com
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License. 
+ * limitations under the License.
  */
 
 package com.liquidware.networkedserial.app;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStreamWriter;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.net.*;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import android.app.Activity;
 import android.app.KeyguardManager;
 import android.app.KeyguardManager.KeyguardLock;
 import android.content.Context;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
-import android.util.Base64;
 import android.util.Log;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.AccelerateInterpolator;
-import android.view.animation.Animation;
-import android.view.animation.TranslateAnimation;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ViewFlipper;
-import android.widget.TextView.OnEditorActionListener;
+
 import com.liquidware.networkedserial.app.R;
 
-public class NetworkedSerialActivity extends SerialPortActivity {
+public class NetworkedSerialActivity extends SerialPortActivity implements Event{
 	private static final String TAG = "NetworkedSerialActivity";
 
 	private static final String mLocalDir = Environment.getExternalStorageDirectory().toString() + "/out";
-	
+
 	private static final int CMD_SUCCESS  = -1;
 	private static final int CMD_TIMEOUT  = -2;
 
@@ -92,6 +65,8 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	String mPingUrl;
 	String mPingResponse;
 	String mActiveCmd;
+	TextView mBatteryStatus;
+	TextView mUpTimeStatus;
 	public static Button mButtonPing;
 	volatile String mReceptionBuffer;
 	volatile StringBuffer mStringBuffer;
@@ -99,6 +74,9 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	volatile boolean mIsExpectedResult;
 	volatile boolean mShowSerialInput;
 	volatile int mTimeout;
+	Handler mHandler = new Handler();
+	EventNotifier mNotifier;
+
 
 	public void setUIDisabled() {
 		mButtonSerial.setEnabled(false);
@@ -113,12 +91,12 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 		mButtonPing.setEnabled(true);
 		mButtonBeep.setEnabled(true);
 		mProgressBar.setVisibility(ProgressBar.INVISIBLE);
-		mProgressBar.setProgress(0);  
+		mProgressBar.setProgress(0);
 	}
-	
+
 	private void setupKeyGuardPower() {
 	    PowerManager.WakeLock wl;
-	    
+
         try {
             Log.w(TAG, "Disabling keyguard");
             KeyguardManager keyguardManager = (KeyguardManager)getSystemService(Activity.KEYGUARD_SERVICE);
@@ -128,7 +106,7 @@ public class NetworkedSerialActivity extends SerialPortActivity {
             Log.e(TAG, ex.getStackTrace().toString());
             ex.printStackTrace();
         }
-        
+
         try {
             Log.w(TAG, "Acquiring wake lock");
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -143,23 +121,23 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		
+
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
         //getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
         //WindowManager.LayoutParams.FLAG_FULLSCREEN);
- 
+
 		setContentView(R.layout.networked_serial_activity);
 		mBuffer = new byte[1024];
 		mStringBuffer = new StringBuffer(500000);
 		mShowSerialInput = true;
-		
+
 		setupKeyGuardPower();
-		
+
 		mReception = (TextView) findViewById(R.id.TextViewReception);
 		mScroller = (ScrollView) findViewById(R.id.scroller);
 		mProgressBar = (ProgressBar) findViewById(R.id.ProgressBar1);
 		mPingIP = (EditText) findViewById(R.id.EditTextPingIP);
-		
+
 		mButtonSerial = (Button)findViewById(R.id.ButtonSerial);
 		mButtonSerial.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
@@ -171,21 +149,21 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 					Toast.makeText(getApplicationContext(), "Error: serial not ready", 1).show();
 				}
 			}
-		});  
-		  
+		});
+
         mButtonBeep = (Button)findViewById(R.id.ButtonSound);
         mButtonBeep.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 Toast.makeText(getApplicationContext(), "Beep!", 1).show();
-                
+
                 AudioManager amanager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
                 int maxVolume = amanager.getStreamMaxVolume(AudioManager.STREAM_ALARM);
                 amanager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0);
-                
+
                 MediaPlayer mp = new MediaPlayer();
-                
+
                 mp.setAudioStreamType(AudioManager.STREAM_ALARM); // this is important.
-                
+
                 try {
                     mp.setDataSource("/sdcard/Music/BeepStereo.wav");
                 } catch (IllegalArgumentException e) {
@@ -212,16 +190,16 @@ public class NetworkedSerialActivity extends SerialPortActivity {
                 }
                 mp.start();
             }
-        });  
-		
-		mButtonPing = (Button)findViewById(R.id.buttonPing); 
+        });
+
+		mButtonPing = (Button)findViewById(R.id.buttonPing);
 		mButtonPing.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
 				Toast.makeText(getApplicationContext(), "Performing ping", 1).show();
-				
+
 				mPingUrl = "http://" + mPingIP.getText().toString();
 				mReception.append("Pinging server '" + mPingUrl + "'\n");
-				
+
                 if (mSerialPort != null) {
                     new ExecuteCommandTask().execute("ping");
                 } else {
@@ -229,21 +207,40 @@ public class NetworkedSerialActivity extends SerialPortActivity {
                 }
 			}
 		});
-		
-		mTextViewIP = (TextView)findViewById(R.id.TextViewNetworkIP);
-		mTextViewIP.setText(Util.getLocalIpAddress());
-		
-		this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN); 
+
+		mTextViewIP = (TextView)findViewById(R.id.NetworkIPTextView);
+		mBatteryStatus = (TextView) findViewById(R.id.BatteryStatusTextView);
+		mUpTimeStatus = (TextView) findViewById(R.id.UpTimeStatusTextView);
+		this.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+
+		mNotifier = new EventNotifier(this);
+		mUpdateTimeTask.run();
 	}
+
+    /**
+     * A global application clock ticker
+     */
+    private final Runnable mUpdateTimeTask = new Runnable() {
+        public void run() {
+            long millisUpTime = SystemClock.uptimeMillis();
+
+            Log.d(TAG,  "tick");
+            mNotifier.onTimerTick(millisUpTime);
+
+            //if (getCurrentMode() != MODE_EXIT)
+            mHandler.postAtTime(this, millisUpTime + 1000);
+        }
+    };
 
 	private class ExecuteCommandTask extends AsyncTask<String, Integer, Boolean> {
 
-		protected void onPreExecute() {
+		@Override
+        protected void onPreExecute() {
 			setUIDisabled();
 		}
 
 		protected void send(String cmd) {
-			/* Prepare the command */	
+			/* Prepare the command */
 			mReceptionBuffer = "";
 			mStringBuffer.delete(0, mStringBuffer.length());
 			mIsExpectedResult = false;
@@ -300,33 +297,48 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			r = expect(expect);
 			return r;
 		}
-		
-		public boolean prepareLocalDirectory(String path) {
-			File dir = new File(path);
-			Util.deleteEntireDirectory(dir);
-			dir.mkdirs();
-			
-			return true;
-		}
 
-		protected Boolean doInBackground(String... cmd) {
+		@Override
+        protected Boolean doInBackground(String... cmd) {
 			boolean r = true;
-			
+
 			mActiveCmd = cmd[0];
-            
-			prepareLocalDirectory(mLocalDir);
-            
+
             if (mActiveCmd.equals("hello")) {
                 int count = 10;
                 setTimeout(5000);
-                
+
                 //Say hello to any serial terminals
                 while (count-- > 0) {
-                    if (send_cmd("[" + count + "]" + 
-                            "Hello there, you serial device\r", "hi")) {
+                    if (send_cmd("Hello there, you serial device. Say hi.\r\n", "hi")) {
                         //Response found, talk to me.
                         setTimeout(20000);
-                        if (send_cmd("Talk to me, you have 30 seconds.\r\nType exit to quit.\r","exit")) {
+
+                        String testText = "Rebellious subjects, enemies to peace,\r\n" +
+                                        "Profaners of this neighbour-stained steel,--\r\n" +
+                                        "Will they not hear? What, ho! you men, you beasts,\r\n" +
+                                        "That quench the fire of your pernicious rage\r\n" +
+                                        "With purple fountains issuing from your veins,\r\n" +
+                                        "On pain of torture, from those bloody hands\r\n" +
+                                        "Throw your mistemperd weapons to the ground,\r\n" +
+                                        "And hear the sentence of your moved prince.\r\n" +
+                                        "Three civil brawls, bred of an airy word,\r\n" +
+                                        "By thee, old Capulet, and Montague,\r\n" +
+                                        "Have thrice disturbd the quiet of our streets,\r\n" +
+                                        "And made Veronas ancient citizens\r\n" +
+                                        "Cast by their grave beseeming ornaments,\r\n" +
+                                        "To wield old partisans, in hands as old,\r\n" +
+                                        "Cankerd with peace, to part your cankerd hate:\r\n" +
+                                        "If ever you disturb our streets again,\r\n" +
+                                        "Your lives shall pay the forfeit of the peace.\r\n" +
+                                        "For this time, all the rest depart away:\r\n" +
+                                        "You Capulet; shall go along with me:\r\n" +
+                                        "And, Montague, come you this afternoon,\r\n" +
+                                        "To know our further pleasure in this case,\r\n" +
+                                        "To old Free-town, our common judgment-place.\r\n" +
+                                        "Once more, on pain of death, all men depart.\r\n\r\n";
+
+                        if (send_cmd(testText + "Talk to me, you have 30 seconds.\r\nType exit to quit.\r","exit")) {
                             send("Goodbye.\r");
                             count = 0;
                             break;
@@ -336,11 +348,11 @@ public class NetworkedSerialActivity extends SerialPortActivity {
                         break;
                     }
                 }
-                
+
             } else if (mActiveCmd.equals("ping")) {
                 mPingResponse = "";
                 setTimeout(3000);
-                
+
                 mPingResponse = Util.pingHttpUrl(mPingUrl);
                 publishProgress(1000);
                 mPingResponse = Util.pingHttpUrl(mPingUrl);
@@ -351,13 +363,14 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			return r;
 		}
 
-		protected void onProgressUpdate(Integer... progress) {
+		@Override
+        protected void onProgressUpdate(Integer... progress) {
 			mProgressBar.setMax(getTimeout());
 			mProgressBar.setProgress(progress[0]);
 			if (mShowSerialInput && mActiveCmd.equals("hello"))
 				mReception.setText(mReceptionBuffer);
 			mScroller.smoothScrollTo(0, mReception.getBottom());
-			
+
 			//Handle the UI progress
 			if (progress[0] == CMD_SUCCESS) {
 				Toast.makeText(getApplicationContext(), "Success!", 1).show();
@@ -372,7 +385,8 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			}
 		}
 
-		protected void onPostExecute(Boolean result) {
+		@Override
+        protected void onPostExecute(Boolean result) {
 			setUIEnabled();
 		}
 	}
@@ -392,7 +406,8 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 		}
 	}
 
-	protected void onDataReceived(final byte[] buffer, final int size) {
+    @Override
+    protected void onDataReceived(final byte[] buffer, final int size) {
 		runOnUiThread(new Runnable() {
 			public void run() {
 				if (mStringBuffer == null)
@@ -401,4 +416,15 @@ public class NetworkedSerialActivity extends SerialPortActivity {
 			}
 		});
 	}
+
+    public void onTimerTick(long millisUpTime) {
+        Log.d(TAG, "Updating battery status");
+        mBatteryStatus.setText(Util.getBatteryStatus());
+
+        Log.d(TAG, "Updating network status");
+        mTextViewIP.setText(Util.getLocalIpAddress());
+
+        Log.d(TAG, "Uptime");
+        mUpTimeStatus.setText("uptime=" + millisUpTime);
+    }
 }

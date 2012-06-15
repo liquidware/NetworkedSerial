@@ -1,9 +1,11 @@
 package com.liquidware.networkedserial.app;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
@@ -21,7 +23,7 @@ import android.view.animation.TranslateAnimation;
 
 public class Util {
 	private static final String TAG = "Util";
-	
+
 	/**
 	 * Count number of '\r' terminated lines in a string.
 	 * @param inputString The input string to count lines.
@@ -32,13 +34,13 @@ public class Util {
 		int lines = 1;
 		while (m.find())
 		    lines ++;
-		
+
 		return lines;
 	}
-	
+
 	/**
 	 *  Recursively deletes the files inside the directory and the directory itself.
-	 *  
+	 *
 	 * @param dir The directory to be deleted
 	 */
 	public static void deleteEntireDirectory(File dir) {
@@ -50,10 +52,45 @@ public class Util {
 	        dir.delete();
 		}
 	}
-	
+
+    public static String readFile(String file) {
+        String result = "";
+        // try opening the myfilename.txt
+        try {
+            // open the file for reading
+            InputStream instream = new FileInputStream(file);
+
+            // if file the available for reading
+            if (instream != null) {
+                // prepare the file for reading
+                InputStreamReader inputreader = new InputStreamReader(instream);
+                BufferedReader buffreader = new BufferedReader(inputreader);
+
+                String line;
+
+                // read every line of the file into the line-variable, on line
+                // at the time
+                while (1 == 1) {
+                    // do something with the settings from the file
+                    line = buffreader.readLine();
+                    if (line == null)
+                        break;
+                    result += line + "\n";
+                }
+
+            }
+
+            // close the file again
+            instream.close();
+        } catch (Exception e) {
+            // do something if the myfilename.txt does not exits
+        }
+        return result;
+    }
+
 	/**
 	 *  Read an entire file into a byte array.
-	 *  
+	 *
 	 * @param file The file to read.
 	 * @return Returns the contents of the file in a byte array
 	 * @throws IOException
@@ -92,7 +129,7 @@ public class Util {
 	    is.close();
 	    return bytes;
 	}
-	
+
 	/**
 	 *  Performs a ping on the specified HTTP URL.
 	 * @param address The address to perform the ping
@@ -100,13 +137,13 @@ public class Util {
 	 */
 	public static String pingHttpUrl(String address) {
 		String response = "";
-		
+
 		try {
 			URL url = new URL(address);
 			Log.d(TAG, "Pinging host '" + url.getHost() + "'");
-			
+
 			HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
-			
+
 			urlConn.setConnectTimeout(1000 * 10); // mTimeout is in seconds
 			long startTime = System.currentTimeMillis();
 			urlConn.connect();
@@ -127,27 +164,46 @@ public class Util {
 		}
 		return response;
 	}
-	
+
+	/**
+	 * Reads the battery status from the on-board battery smart pack
+	 * @return A string containing current and capacity
+	 */
+    public static String getBatteryStatus() {
+        String current_now = "current_now=";
+        String capacity = "capacity=";
+
+        current_now += new String(Util.readFile("/sys/class/power_supply/itaniumpack-0/current_now").trim());
+        capacity += new String(Util.readFile("/sys/class/power_supply/itaniumpack-0/capacity").trim());
+
+        String str = " " + current_now + "mA," + capacity + "% ";
+        Log.d(TAG, str);
+        return str;
+    }
+
 	/**
 	 * Gets the local host IP address of all adapters. Excludes the loopback address.
 	 * @return The host IP address of all adapters.
 	 */
 	public static String getLocalIpAddress() {
 		String response = "";
-		Log.d(TAG, "getLocalIpAddress"); 
-		
+		String ipAddresses = "ipAddresses=";
+		String adapters = "adapters=";
+		Log.d(TAG, "getLocalIpAddress");
+
 		try {
-			Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); 	
-			
+			Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces();
+
 			while(en.hasMoreElements()) {
 			    Log.d(TAG, "Next network interface");
 				NetworkInterface intf = en.nextElement();
 				Log.d(TAG, "Name=" + intf.getDisplayName());
+				adapters += intf.getDisplayName() + ",";
 				Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses();
 				while(enumIpAddr.hasMoreElements()) {
 					InetAddress inetAddress = enumIpAddr.nextElement();
 					if (!inetAddress.isLoopbackAddress()) {
-						response += (intf.getName() + ":" + 
+					    ipAddresses += (intf.getName() + ":" +
 								    inetAddress.getHostAddress().toString());
 					}
 				}
@@ -157,9 +213,9 @@ public class Util {
 			//Log.e(TAG, ex.getMessage().toString());
 			response = "Error\n";
 		}
-		return response;
+		return adapters + "\n" + ipAddresses;
 	}
-	
+
 	public static Animation inFromRightAnimation() {
 
 		Animation inFromRight = new TranslateAnimation(
@@ -170,7 +226,7 @@ public class Util {
 		inFromRight.setInterpolator(new AccelerateInterpolator());
 		return inFromRight;
 	}
-	
+
 	public static Animation outToLeftAnimation() {
 		Animation outtoLeft = new TranslateAnimation(
 				Animation.RELATIVE_TO_PARENT,  0.0f, Animation.RELATIVE_TO_PARENT,  -1.0f,
@@ -190,7 +246,7 @@ public class Util {
 		inFromLeft.setInterpolator(new AccelerateInterpolator());
 		return inFromLeft;
 	}
-	
+
 	public static Animation outToRightAnimation() {
 		Animation outtoRight = new TranslateAnimation(
 				Animation.RELATIVE_TO_PARENT,  0.0f, Animation.RELATIVE_TO_PARENT,  +1.0f,
